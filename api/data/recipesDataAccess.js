@@ -7,12 +7,12 @@ module.exports = () => {
         return new Promise(resolve => {
             superagent.get('http://www.recipepuppy.com/api/')
                 .query({ i: ingredients }) //passa os ingredientes para a busca na api
-                //.query({ p: 1 })
+                //.query({ p: 0 })
                 .type('json')
                 .catch(error => {
                     const errorReturn =
                     {
-                        "error":{
+                        "ApiError":{
                             "status": error.status,
                             "msg": httpStatus[error.status] + ' | HTTP STATUS -> ' + error.status
                         }

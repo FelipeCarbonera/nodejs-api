@@ -3,95 +3,103 @@ const gifData = require('../data/gifDataAccess')();
 const async = require('async');
 
 module.exports = () => {
-
     const controller = {};
 
+    // cria o objeto pra ser retornado no requisição da api 
     const apiRecipesReturn = {};
-
     apiRecipesReturn.keywords = [];
     apiRecipesReturn.recipes = [];
 
+    //método que retorna o 'apiRecipesReturn' com as receitas e gif encontradados pelos ingredientes  
     controller.recipes = (ingredients) => {
         return new Promise(resolve => {
-            recipesData.GetRecipesFromApi(ingredients)
-                .catch(error => {
-                    console.log("Error on 'recipesData.GetRecipesFromApi(ingredients)' -> " + error);
-                    resolve("ERRO!");
-                })
-                .then(apiRet => {
+            //método responsavel por popular as receitas
+            PopulateRecipes(ingredients).then(apiRecipes => {
 
-                    //caso a api retorne com algum status diferente, retorna o status http. 
-                    if (apiRet.status != 200 || apiRet.error.status != 200) {
-                        resolve(httpStatus[apiRet.status] + ' | HTTP STATUS -> ' + apiRet.status);
-                    }
-                    else {
-                        const apiRecipes = JSON.parse(apiRet.text).results;  // apiRecipes = [ { "title": "", "href": "", "ingredients": "", "thumbnail": "" } ]
+                //cria o array com os ingredientes
+                SplitAndSortString(ingredients, ',').then(apiKeywords => {
+                    apiRecipesReturn.keywords = apiKeywords;
+                    apiRecipesReturn.recipes = apiRecipes;
 
-                        //cria e ordena o array com os ingredientes
-                        splitAndSortString(ingredients, ',').then(arrayIngredients => {
-                            apiRecipesReturn.keywords = arrayIngredients;
-
-                            //chama o método para popular com as receitas e buscar o gif de cada receita
-                            PopulateRecipe(apiRecipes).then(recipes => {
-                                apiRecipesReturn.recipes = recipes;
-
-                                //retorna o objeto apiRecipesReturn, que contém a estrutura e as receitas encontradas com os ingredientes passados
-                                resolve(apiRecipesReturn);
-                            });
-                        });
-                    }
+                    //retorna o objeto apiRecipesReturn populado e pronto
+                    resolve(apiRecipesReturn);
                 });
+            });
         });
-    };
+    }
 
     return controller;
 }
 
-// cria e ordena array de acordo com uma string e um reparador
-function splitAndSortString(stringToSplit, separator) {
+// cria e ordena um array de acordo com uma string e um reparador
+function SplitAndSortString(stringToSplit, separator) {
     return new Promise(resolve => {
         resolve(stringToSplit.split(separator).sort());
     });
 }
 
 // popula o objeto recipes de acordo com as receitas encontradas
-function PopulateRecipe(apiRecipe) {
+function PopulateRecipes(ingredients) {
     return new Promise(resolve => {
 
-        const recipes = [];
+        GetRecipesFromRecipePuppyApiByIngredients(ingredients).then(RecipesPuppy => {
 
-        var itemsProcessed = 0;
+            if (RecipesPuppy.ApiError != undefined) {
+                resolve(RecipesPuppy);
+            }
+            const recipes = [];
 
-        // para cada receita retornada da api, cria um objeto de recipe novo com uma nova estrutura
-        async.each(apiRecipe, function (r) {
-            const recipe = {};
-            recipe.title = '';
-            recipe.ingredients = [];
-            recipe.link = '';
-            recipe.gif = '';
+            var iterationsCount = 0;
+            // para cada receita retornada da api, cria um objeto de recipe novo com uma nova estrutura
 
-            // cria o array com todos os ingredientes da raceita
-            splitAndSortString(r.ingredients, ',').then(arrayIngredients => {
+            async.each(RecipesPuppy, function (r) {
 
-                //busca a url de um gif encontrado com o titulo da receita
-                gifData.GetRecipeGifFromApi(r.title).then(gif => {
+                GetGifUrlFromGiphyApiByTitle(r.title).then(giphyUrl => {
 
-                    recipe.title = r.title;
-                    recipe.ingredients = arrayIngredients;
-                    recipe.link = r.href;
-                    recipe.gif = gif;
-                    
-                    //adiciona a receita no array de receitas
-                    recipes.push(recipe);
+                    SplitAndSortString(r.ingredients, ',').then(apiRecipeIngredients => {
+                        const recipe = {};
 
-                    itemsProcessed++;
-                    // garante que todas as iterações do .each foram realizadas
-                    if (itemsProcessed == apiRecipe.length) {
-                        resolve(recipes);
-                    }
+                        recipe.title = r.title;
+                        recipe.ingredients = apiRecipeIngredients;
+                        recipe.link = r.href;
+                        recipe.gif = giphyUrl;
+
+                        recipes.push(recipe);
+
+                        iterationsCount++;
+                        if (iterationsCount == RecipesPuppy.length) {
+                            resolve(recipes);
+                        }
+                    });
                 });
             });
-
         });
+    });
+}
+
+//função responsável por realizar a chamada da api de receitas 
+//recebe uma string contendo os ingredientes separados por virgula
+function GetRecipesFromRecipePuppyApiByIngredients(ingredients) {
+    return new Promise(resolve => {
+        recipesData.GetRecipesFromApi(ingredients)
+            .then(apiRet => {
+
+                //caso a api retorne um erro
+                if (typeof apiRet.ApiError != 'undefined') {
+                    resolve(apiRet);
+                }
+
+                //converte o retorno da api para Json
+                const RecipesPuppy = JSON.parse(apiRet.text).results;  // apiRecipes = [ { "title": "", "href": "", "ingredients": "", "thumbnail": "" } ]
+                resolve(RecipesPuppy);
+
+            });
+    });
+}
+
+//função responsável por realizar a chamada da api da giphy
+function GetGifUrlFromGiphyApiByTitle(title) {
+    return new Promise(resolve => {
+        gifData.GetRecipeGifFromApi(title).then(giphyUrl => { resolve(giphyUrl) });
     });
 }

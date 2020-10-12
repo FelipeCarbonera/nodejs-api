@@ -42,6 +42,7 @@ module.exports = () => {
 
                     //busca somente a o link da primeira imagem encontrada com o nome da receita
                     var url = gif.data[0].images.downsized.url
+                    
                     resolve(url);  
                 });
         });
